@@ -15,9 +15,6 @@
   "env": {
     "PYTHONPATH": "."
   },
-  "functions": {
-    "app.py": {
-      "maxDuration": 30
-    }
-  }
+  "regions": ["iad1"],
+  "public": false
 } 

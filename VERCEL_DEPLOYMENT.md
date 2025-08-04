@@ -99,11 +99,8 @@ vercel
   "env": {
     "PYTHONPATH": "."              // Python path configuration
   },
-  "functions": {
-    "app.py": {
-      "maxDuration": 30            // Max execution time (seconds)
-    }
-  }
+  "regions": ["iad1"],             // Deploy to US East (Virginia)
+  "public": false                  // Private deployment
 }
 ```
 
