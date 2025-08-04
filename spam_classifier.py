@@ -1,113 +1,88 @@
-import spacy
+import re
+import string
 import joblib
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split
-import re
-import os
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class SpamClassifier:
-    def __init__(self, model_path='models/spam_classifier.joblib'):
-        self.model_path = model_path
-        self.nlp = spacy.load("en_core_web_sm")
+    def __init__(self):
         self.pipeline = None
-        self.load_model()
-    
+        self.is_trained = False
+        
     def preprocess_text(self, text):
         """
-        Preprocess text using spaCy for spam classification
+        Basic text preprocessing without spaCy
         """
+        if not isinstance(text, str):
+            return ""
+        
         # Convert to lowercase
         text = text.lower()
         
-        # Remove URLs
-        text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
+        # Remove punctuation
+        text = text.translate(str.maketrans('', '', string.punctuation))
         
-        # Remove email addresses
-        text = re.sub(r'\S+@\S+', '', text)
+        # Remove extra whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
         
-        # Remove special characters but keep spaces
-        text = re.sub(r'[^\w\s]', ' ', text)
+        # Remove numbers
+        text = re.sub(r'\d+', '', text)
         
-        # Process with spaCy
-        doc = self.nlp(text)
-        
-        # Extract tokens, lemmatize, and filter
-        tokens = []
-        for token in doc:
-            # Keep only alphabetic tokens, not stopwords, and length > 2
-            if (token.is_alpha and 
-                not token.is_stop and 
-                len(token.text) > 2 and
-                not token.is_punct):
-                tokens.append(token.lemma_)
-        
-        return ' '.join(tokens)
+        return text
     
-    def extract_features(self, text):
+    def extract_features(self, texts):
         """
-        Extract additional features for spam classification
+        Extract features using TF-IDF vectorization
         """
-        features = {}
+        if isinstance(texts, str):
+            texts = [texts]
         
-        # Text length
-        features['text_length'] = len(text)
+        # Preprocess all texts
+        processed_texts = [self.preprocess_text(text) for text in texts]
         
-        # Number of words
-        features['word_count'] = len(text.split())
-        
-        # Number of sentences
-        doc = self.nlp(text)
-        features['sentence_count'] = len(list(doc.sents))
-        
-        # Number of exclamation marks
-        features['exclamation_count'] = text.count('!')
-        
-        # Number of question marks
-        features['question_count'] = text.count('?')
-        
-        # Number of capital letters
-        features['capital_count'] = sum(1 for c in text if c.isupper())
-        
-        # Number of numbers
-        features['number_count'] = sum(1 for c in text if c.isdigit())
-        
-        # Check for spam indicators
-        spam_words = ['free', 'money', 'cash', 'winner', 'prize', 'urgent', 'limited', 'offer', 
-                     'click', 'buy', 'discount', 'sale', 'credit', 'loan', 'debt', 'investment',
-                     'earn', 'income', 'million', 'dollar', 'lottery', 'casino', 'viagra', 'pills']
-        
-        features['spam_word_count'] = sum(1 for word in text.lower().split() if word in spam_words)
-        
-        return features
+        return processed_texts
     
     def train(self, texts, labels):
         """
         Train the spam classifier
         """
-        # Preprocess all texts
-        processed_texts = [self.preprocess_text(text) for text in texts]
+        logger.info("Starting model training...")
         
-        # Create pipeline with TF-IDF and Naive Bayes
+        # Preprocess texts
+        processed_texts = self.extract_features(texts)
+        
+        # Create pipeline
         self.pipeline = Pipeline([
-            ('tfidf', TfidfVectorizer(max_features=5000, ngram_range=(1, 2))),
-            ('classifier', MultinomialNB())
+            ('tfidf', TfidfVectorizer(
+                max_features=5000,
+                stop_words='english',
+                ngram_range=(1, 2),
+                min_df=2,
+                max_df=0.95
+            )),
+            ('classifier', MultinomialNB(alpha=1.0))
         ])
         
-        # Train the pipeline
+        # Train the model
         self.pipeline.fit(processed_texts, labels)
+        self.is_trained = True
         
-        # Save the model
-        self.save_model()
+        logger.info("Model training completed!")
+        return True
     
     def predict(self, text):
         """
         Predict if text is spam or ham
         """
-        if self.pipeline is None:
-            raise ValueError("Model not trained or loaded")
+        if not self.is_trained:
+            raise ValueError("Model must be trained before making predictions")
         
         # Preprocess the text
         processed_text = self.preprocess_text(text)
@@ -116,93 +91,73 @@ class SpamClassifier:
         prediction = self.pipeline.predict([processed_text])[0]
         probability = self.pipeline.predict_proba([processed_text])[0]
         
-        # Get confidence scores
-        ham_prob = probability[0] if prediction == 0 else probability[1]
-        spam_prob = probability[1] if prediction == 1 else probability[0]
-        
         return {
             'prediction': 'spam' if prediction == 1 else 'ham',
-            'confidence': {
-                'ham': float(ham_prob),
-                'spam': float(spam_prob)
-            },
-            'features': self.extract_features(text)
+            'confidence': float(max(probability)),
+            'spam_probability': float(probability[1]),
+            'ham_probability': float(probability[0])
         }
     
-    def save_model(self):
+    def save_model(self, filepath):
         """
         Save the trained model
         """
-        os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
-        joblib.dump(self.pipeline, self.model_path)
+        if not self.is_trained:
+            raise ValueError("No trained model to save")
+        
+        joblib.dump(self.pipeline, filepath)
+        logger.info(f"Model saved to {filepath}")
     
-    def load_model(self):
+    def load_model(self, filepath):
         """
         Load a trained model
         """
         try:
-            if os.path.exists(self.model_path):
-                self.pipeline = joblib.load(self.model_path)
-                print(f"Model loaded from {self.model_path}")
-            else:
-                print(f"No saved model found at {self.model_path}")
+            self.pipeline = joblib.load(filepath)
+            self.is_trained = True
+            logger.info(f"Model loaded from {filepath}")
+            return True
         except Exception as e:
-            print(f"Error loading model: {e}")
-            self.pipeline = None
+            logger.error(f"Error loading model: {e}")
+            return False
 
 # Sample training data
 SAMPLE_DATA = {
-    'ham': [
-        "Hi John, how are you doing? Let's meet for coffee tomorrow.",
-        "The meeting is scheduled for 2 PM today. Please bring your laptop.",
-        "Thanks for your email. I'll get back to you soon.",
-        "Can you please send me the report by Friday?",
-        "I'm looking forward to our presentation next week.",
-        "The project deadline has been extended to next month.",
-        "Please review the attached documents and let me know your thoughts.",
-        "I'll be out of office next week. Please contact Sarah for urgent matters.",
-        "The quarterly results look great! Good job everyone.",
-        "Don't forget to submit your timesheet by the end of the day."
+    'texts': [
+        # Spam examples
+        "URGENT: You have won a $1000 gift card! Click here to claim now!",
+        "FREE VIAGRA NOW!!! Limited time offer, act fast!",
+        "CONGRATULATIONS! You've been selected for a free iPhone!",
+        "Make money fast! Work from home and earn $5000 per week!",
+        "LOSE WEIGHT FAST! Try our miracle diet pill today!",
+        "FREE CREDIT REPORT! Check your score now!",
+        "WIN A FREE VACATION! Enter our sweepstakes now!",
+        "MAKE MONEY ONLINE! Join our affiliate program!",
+        "FREE SAMPLE! Try our new product today!",
+        "URGENT: Your account has been suspended. Click here to verify!",
+        
+        # Ham examples
+        "Hi John, can you send me the meeting notes from yesterday?",
+        "Thanks for your help with the project. It looks great!",
+        "Don't forget about the team lunch tomorrow at 12 PM.",
+        "I'll be working from home today due to the weather.",
+        "Please review the attached document and let me know your thoughts.",
+        "The presentation went well. Thanks for your support!",
+        "Can we schedule a call to discuss the new requirements?",
+        "I've updated the spreadsheet with the latest data.",
+        "Happy birthday! Hope you have a wonderful day!",
+        "Let me know if you need any clarification on the report."
     ],
-    'spam': [
-        "FREE MONEY! Click here to claim your $1000 prize NOW!",
-        "URGENT: You've won a million dollars! Send your bank details immediately!",
-        "Buy Viagra online at 50% discount! Limited time offer!",
-        "Earn $5000 per week working from home! No experience needed!",
-        "CONGRATULATIONS! You're our lucky winner! Claim your prize!",
-        "Hot singles in your area! Click here to meet them now!",
-        "Get rich quick! Invest in our amazing opportunity!",
-        "FREE iPhone! Just pay shipping and handling!",
-        "Lose weight fast with our miracle pills! Guaranteed results!",
-        "URGENT: Your account has been suspended. Click here to verify!"
-    ]
+    'labels': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 }
-
-def create_sample_dataset():
-    """
-    Create a sample dataset for training
-    """
-    texts = []
-    labels = []
-    
-    # Add ham samples
-    for text in SAMPLE_DATA['ham']:
-        texts.append(text)
-        labels.append(0)  # 0 for ham
-    
-    # Add spam samples
-    for text in SAMPLE_DATA['spam']:
-        texts.append(text)
-        labels.append(1)  # 1 for spam
-    
-    return texts, labels
 
 if __name__ == "__main__":
     # Create and train the classifier
     classifier = SpamClassifier()
     
     # Create sample dataset
-    texts, labels = create_sample_dataset()
+    texts = SAMPLE_DATA['texts']
+    labels = SAMPLE_DATA['labels']
     
     # Train the model
     print("Training spam classifier...")

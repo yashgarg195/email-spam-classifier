@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
-from spam_classifier import SpamClassifier
+from spam_classifier import SpamClassifier, SAMPLE_DATA
 import os
 import logging
 
@@ -28,14 +28,31 @@ def initialize_classifier():
     global classifier
     try:
         classifier = SpamClassifier()
-        if classifier.pipeline is None:
-            print("No trained model found. Training a new model...")
-            from spam_classifier import create_sample_dataset
-            texts, labels = create_sample_dataset()
-            classifier.train(texts, labels)
-        return True
+        model_path = 'models/spam_classifier.joblib'
+        
+        if os.path.exists(model_path):
+            if classifier.load_model(model_path):
+                print(f"Model loaded from {model_path}")
+                return True
+            else:
+                print("⚠️  Failed to load model. Training new model...")
+        else:
+            print("⚠️  No pre-trained model found. Training new model...")
+        
+        # Train with sample data
+        texts = SAMPLE_DATA['texts']
+        labels = SAMPLE_DATA['labels']
+        
+        if classifier.train(texts, labels):
+            classifier.save_model(model_path)
+            print("✅ Model trained and saved successfully")
+            return True
+        else:
+            print("❌ Failed to train model")
+            return False
+            
     except Exception as e:
-        print(f"Error initializing classifier: {e}")
+        print(f"❌ Error initializing classifier: {e}")
         return False
 
 @app.route('/')
@@ -48,7 +65,7 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'model_loaded': classifier is not None and classifier.pipeline is not None
+        'model_loaded': classifier is not None and classifier.is_trained
     })
 
 @app.route('/api/classify', methods=['POST'])
@@ -69,7 +86,7 @@ def classify_email():
                 'error': 'Empty text provided'
             }), 400
         
-        if classifier is None or classifier.pipeline is None:
+        if classifier is None or not classifier.is_trained:
             return jsonify({
                 'error': 'Model not loaded'
             }), 500
@@ -82,7 +99,8 @@ def classify_email():
             'text': text,
             'prediction': result['prediction'],
             'confidence': result['confidence'],
-            'features': result['features']
+            'spam_probability': result['spam_probability'],
+            'ham_probability': result['ham_probability']
         })
         
     except Exception as e:
@@ -99,10 +117,9 @@ def train_model():
                 'error': 'Classifier not initialized'
             }), 500
         
-        # For now, we'll retrain with the sample data
-        # In a real application, you'd accept training data from the request
-        from spam_classifier import create_sample_dataset
-        texts, labels = create_sample_dataset()
+        # Retrain with the sample data
+        texts = SAMPLE_DATA['texts']
+        labels = SAMPLE_DATA['labels']
         
         classifier.train(texts, labels)
         

@@ -1,51 +1,63 @@
 #!/usr/bin/env python3
 """
-Training script for the spam classifier
+Training script for the Email Spam Classifier
 """
 
-from spam_classifier import SpamClassifier, create_sample_dataset
 import os
+from spam_classifier import SpamClassifier, SAMPLE_DATA
 
 def main():
-    print("🚀 Starting spam classifier training...")
+    print("🚀 Training Email Spam Classifier...")
+    print("=" * 50)
     
-    # Create the classifier
+    # Create models directory if it doesn't exist
+    os.makedirs('models', exist_ok=True)
+    
+    # Initialize classifier
     classifier = SpamClassifier()
     
-    # Create sample dataset
-    print("📊 Creating training dataset...")
-    texts, labels = create_sample_dataset()
+    # Get training data
+    texts = SAMPLE_DATA['texts']
+    labels = SAMPLE_DATA['labels']
     
-    print(f"📈 Dataset size: {len(texts)} samples")
-    print(f"📈 Ham samples: {labels.count(0)}")
-    print(f"📈 Spam samples: {labels.count(1)}")
+    print(f"📊 Training with {len(texts)} samples:")
+    print(f"   - Spam samples: {sum(labels)}")
+    print(f"   - Ham samples: {len(labels) - sum(labels)}")
     
     # Train the model
-    print("🤖 Training the model...")
-    classifier.train(texts, labels)
+    print("\n🔄 Training model...")
+    success = classifier.train(texts, labels)
     
-    print("✅ Training completed!")
-    print(f"💾 Model saved to: {classifier.model_path}")
-    
-    # Test the model
-    print("\n🧪 Testing the model...")
-    test_cases = [
-        ("Hi, can we schedule a meeting for tomorrow?", "Expected: ham"),
-        ("FREE MONEY! Click here to claim your prize!", "Expected: spam"),
-        ("Please send me the quarterly report.", "Expected: ham"),
-        ("URGENT: You've won a million dollars!", "Expected: spam"),
-        ("The project deadline has been extended.", "Expected: ham"),
-        ("Buy Viagra online at 50% discount!", "Expected: spam")
-    ]
-    
-    for text, expected in test_cases:
-        result = classifier.predict(text)
-        print(f"Text: {text[:40]}...")
-        print(f"Prediction: {result['prediction']} ({expected})")
-        print(f"Confidence: Ham: {result['confidence']['ham']:.3f}, Spam: {result['confidence']['spam']:.3f}")
-        print("-" * 60)
-    
-    print("🎉 Model training and testing completed successfully!")
+    if success:
+        print("✅ Model training completed successfully!")
+        
+        # Save the model
+        model_path = 'models/spam_classifier.joblib'
+        classifier.save_model(model_path)
+        print(f"💾 Model saved to: {model_path}")
+        
+        # Test the model
+        print("\n🧪 Testing model with sample texts...")
+        test_texts = [
+            "URGENT: Claim your free iPhone now!",
+            "Hi, can you send me the meeting notes?",
+            "FREE MONEY! Click here to win $1000!",
+            "Thanks for your help with the project."
+        ]
+        
+        for text in test_texts:
+            result = classifier.predict(text)
+            print(f"Text: '{text[:50]}...'")
+            print(f"  Prediction: {result['prediction']}")
+            print(f"  Confidence: {result['confidence']:.2%}")
+            print(f"  Spam probability: {result['spam_probability']:.2%}")
+            print()
+        
+        print("🎉 Training and testing completed successfully!")
+        return True
+    else:
+        print("❌ Model training failed!")
+        return False
 
 if __name__ == "__main__":
     main() 
