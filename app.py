@@ -2,9 +2,23 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from spam_classifier import SpamClassifier
 import os
+import logging
 
 app = Flask(__name__)
 CORS(app)
+
+# Configure logging for Vercel
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Add caching headers for better performance
+@app.after_request
+def add_cache_headers(response):
+    if request.path.startswith('/api/'):
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    else:
+        response.headers['Cache-Control'] = 'public, max-age=300'
+    return response
 
 # Initialize the spam classifier
 classifier = None
@@ -125,18 +139,17 @@ def get_examples():
     
     return jsonify(examples)
 
+# Initialize the classifier when the module is imported
+if initialize_classifier():
+    print("✅ Classifier initialized successfully")
+else:
+    print("❌ Failed to initialize classifier")
+
+# Create templates directory if it doesn't exist
+os.makedirs('templates', exist_ok=True)
+os.makedirs('static', exist_ok=True)
+
 if __name__ == '__main__':
     print("🚀 Starting Spam Classifier Web Application...")
-    
-    # Initialize the classifier
-    if initialize_classifier():
-        print("✅ Classifier initialized successfully")
-    else:
-        print("❌ Failed to initialize classifier")
-    
-    # Create templates directory if it doesn't exist
-    os.makedirs('templates', exist_ok=True)
-    os.makedirs('static', exist_ok=True)
-    
     print("🌐 Starting web server on http://localhost:8080")
     app.run(debug=True, host='0.0.0.0', port=8080) 
