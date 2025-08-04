@@ -55,4 +55,4 @@ python app.py
 ├── models/                # Saved models
 ├── static/                # Frontend assets
 └── templates/             # HTML templates
-``` 
+```
