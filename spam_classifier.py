@@ -1,25 +1,32 @@
 import re
 import string
-import joblib
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.pipeline import Pipeline
-import logging
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+import json
+import os
 
 class SpamClassifier:
     def __init__(self):
-        self.pipeline = None
-        self.is_trained = False
+        self.spam_keywords = [
+            'free', 'money', 'cash', 'winner', 'prize', 'urgent', 'limited', 'offer',
+            'click', 'buy', 'discount', 'sale', 'credit', 'loan', 'debt', 'investment',
+            'earn', 'income', 'million', 'dollar', 'lottery', 'casino', 'viagra', 'pills',
+            'weight loss', 'diet', 'miracle', 'guaranteed', 'act now', 'limited time',
+            'exclusive', 'secret', 'amazing', 'incredible', 'shocking', 'revealed',
+            'bank account', 'social security', 'password', 'verify', 'confirm',
+            'suspended', 'blocked', 'expired', 'renew', 'update', 'claim'
+        ]
         
+        self.ham_keywords = [
+            'meeting', 'project', 'report', 'schedule', 'deadline', 'team',
+            'work', 'office', 'business', 'client', 'customer', 'service',
+            'help', 'support', 'question', 'answer', 'information', 'data',
+            'document', 'file', 'attachment', 'review', 'feedback', 'thanks',
+            'appreciate', 'coffee', 'lunch', 'dinner', 'birthday', 'congratulations'
+        ]
+        
+        self.is_trained = True  # Rule-based doesn't need training
+    
     def preprocess_text(self, text):
-        """
-        Basic text preprocessing without spaCy
-        """
+        """Basic text preprocessing"""
         if not isinstance(text, str):
             return ""
         
@@ -32,96 +39,103 @@ class SpamClassifier:
         # Remove extra whitespace
         text = re.sub(r'\s+', ' ', text).strip()
         
-        # Remove numbers
-        text = re.sub(r'\d+', '', text)
-        
         return text
     
-    def extract_features(self, texts):
-        """
-        Extract features using TF-IDF vectorization
-        """
-        if isinstance(texts, str):
-            texts = [texts]
+    def extract_features(self, text):
+        """Extract features for classification"""
+        processed_text = self.preprocess_text(text)
+        words = processed_text.split()
         
-        # Preprocess all texts
-        processed_texts = [self.preprocess_text(text) for text in texts]
+        features = {
+            'text_length': len(text),
+            'word_count': len(words),
+            'spam_keyword_count': 0,
+            'ham_keyword_count': 0,
+            'exclamation_count': text.count('!'),
+            'question_count': text.count('?'),
+            'capital_count': sum(1 for c in text if c.isupper()),
+            'number_count': sum(1 for c in text if c.isdigit()),
+            'url_count': len(re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)),
+            'email_count': len(re.findall(r'\S+@\S+', text))
+        }
         
-        return processed_texts
+        # Count spam and ham keywords
+        for word in words:
+            if word in self.spam_keywords:
+                features['spam_keyword_count'] += 1
+            if word in self.ham_keywords:
+                features['ham_keyword_count'] += 1
+        
+        return features
     
-    def train(self, texts, labels):
-        """
-        Train the spam classifier
-        """
-        logger.info("Starting model training...")
+    def calculate_spam_score(self, features):
+        """Calculate spam probability based on features"""
+        score = 0.0
         
-        # Preprocess texts
-        processed_texts = self.extract_features(texts)
+        # Spam indicators (positive score)
+        score += features['spam_keyword_count'] * 0.3
+        score += features['exclamation_count'] * 0.1
+        score += features['capital_count'] / max(features['text_length'], 1) * 0.2
+        score += features['url_count'] * 0.2
+        score += features['email_count'] * 0.1
         
-        # Create pipeline
-        self.pipeline = Pipeline([
-            ('tfidf', TfidfVectorizer(
-                max_features=5000,
-                stop_words='english',
-                ngram_range=(1, 2),
-                min_df=2,
-                max_df=0.95
-            )),
-            ('classifier', MultinomialNB(alpha=1.0))
-        ])
+        # Ham indicators (negative score)
+        score -= features['ham_keyword_count'] * 0.2
+        score -= features['question_count'] * 0.05
         
-        # Train the model
-        self.pipeline.fit(processed_texts, labels)
-        self.is_trained = True
+        # Normalize score to 0-1 range
+        spam_probability = min(max(score, 0.0), 1.0)
         
-        logger.info("Model training completed!")
-        return True
+        return spam_probability
     
     def predict(self, text):
-        """
-        Predict if text is spam or ham
-        """
-        if not self.is_trained:
-            raise ValueError("Model must be trained before making predictions")
+        """Predict if text is spam or ham"""
+        features = self.extract_features(text)
+        spam_probability = self.calculate_spam_score(features)
         
-        # Preprocess the text
-        processed_text = self.preprocess_text(text)
+        # Determine prediction based on threshold
+        prediction = 'spam' if spam_probability > 0.5 else 'ham'
         
-        # Make prediction
-        prediction = self.pipeline.predict([processed_text])[0]
-        probability = self.pipeline.predict_proba([processed_text])[0]
+        # Calculate confidence based on how far from threshold
+        confidence = abs(spam_probability - 0.5) * 2  # Scale to 0-1
         
         return {
-            'prediction': 'spam' if prediction == 1 else 'ham',
-            'confidence': float(max(probability)),
-            'spam_probability': float(probability[1]),
-            'ham_probability': float(probability[0])
+            'prediction': prediction,
+            'confidence': confidence,
+            'spam_probability': spam_probability,
+            'ham_probability': 1.0 - spam_probability,
+            'features': features
         }
     
+    def train(self, texts, labels):
+        """Placeholder for compatibility - rule-based doesn't need training"""
+        return True
+    
     def save_model(self, filepath):
-        """
-        Save the trained model
-        """
-        if not self.is_trained:
-            raise ValueError("No trained model to save")
+        """Save the classifier configuration"""
+        config = {
+            'spam_keywords': self.spam_keywords,
+            'ham_keywords': self.ham_keywords
+        }
         
-        joblib.dump(self.pipeline, filepath)
-        logger.info(f"Model saved to {filepath}")
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        with open(filepath, 'w') as f:
+            json.dump(config, f, indent=2)
     
     def load_model(self, filepath):
-        """
-        Load a trained model
-        """
+        """Load the classifier configuration"""
         try:
-            self.pipeline = joblib.load(filepath)
-            self.is_trained = True
-            logger.info(f"Model loaded from {filepath}")
+            with open(filepath, 'r') as f:
+                config = json.load(f)
+            
+            self.spam_keywords = config.get('spam_keywords', self.spam_keywords)
+            self.ham_keywords = config.get('ham_keywords', self.ham_keywords)
             return True
         except Exception as e:
-            logger.error(f"Error loading model: {e}")
+            print(f"Error loading model: {e}")
             return False
 
-# Sample training data
+# Sample training data (for compatibility)
 SAMPLE_DATA = {
     'texts': [
         # Spam examples

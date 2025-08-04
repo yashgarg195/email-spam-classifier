@@ -100,7 +100,8 @@ def classify_email():
             'prediction': result['prediction'],
             'confidence': result['confidence'],
             'spam_probability': result['spam_probability'],
-            'ham_probability': result['ham_probability']
+            'ham_probability': result['ham_probability'],
+            'features': result['features']
         })
         
     except Exception as e:
