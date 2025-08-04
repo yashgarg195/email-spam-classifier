@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Spam Classifier - spaCy NLP</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .input-section {
+            margin-bottom: 30px;
+        }
+
+        .input-section label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .text-input {
+            width: 100%;
+            min-height: 120px;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: vertical;
+            transition: border-color 0.3s ease;
+        }
+
+        .text-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #6c757d;
+            border: 2px solid #e9ecef;
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .result-section {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .result-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .prediction {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .prediction-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-right: 15px;
+        }
+
+        .prediction-spam {
+            background: #dc3545;
+            color: white;
+        }
+
+        .prediction-ham {
+            background: #28a745;
+            color: white;
+        }
+
+        .prediction-text {
+            font-size: 1.5em;
+            font-weight: 600;
+        }
+
+        .confidence-bars {
+            margin-bottom: 20px;
+        }
+
+        .confidence-bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .confidence-label {
+            width: 80px;
+            font-weight: 600;
+        }
+
+        .confidence-progress {
+            flex: 1;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 15px;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            transition: width 0.5s ease;
+        }
+
+        .confidence-fill.ham {
+            background: linear-gradient(90deg, #28a745, #20c997);
+        }
+
+        .confidence-fill.spam {
+            background: linear-gradient(90deg, #dc3545, #fd7e14);
+        }
+
+        .confidence-value {
+            width: 60px;
+            text-align: right;
+            font-weight: 600;
+        }
+
+        .features {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .features h4 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .feature-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .feature-value {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .feature-label {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .examples {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .example-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .example-btn {
+            padding: 8px 16px;
+            background: #e9ecef;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .example-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .example-btn.ham {
+            border-left: 4px solid #28a745;
+        }
+
+        .example-btn.spam {
+            border-left: 4px solid #dc3545;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 15px;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📧 Email Spam Classifier</h1>
+            <p>Powered by spaCy NLP & Machine Learning</p>
+        </div>
+
+        <div class="content">
+            <div class="input-section">
+                <label for="emailText">Enter email text to classify:</label>
+                <textarea 
+                    id="emailText" 
+                    class="text-input" 
+                    placeholder="Paste your email content here...&#10;&#10;Example: Hi John, can we schedule a meeting for tomorrow?"
+                ></textarea>
+                
+                <div class="button-group">
+                    <button id="classifyBtn" class="btn btn-primary">🔍 Classify Email</button>
+                    <button id="clearBtn" class="btn btn-secondary">🗑️ Clear</button>
+                    <button id="examplesBtn" class="btn btn-secondary">📋 Show Examples</button>
+                </div>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Analyzing email content...</p>
+            </div>
+
+            <div class="error" id="error"></div>
+
+            <div class="examples" id="examples">
+                <h3>Try these examples:</h3>
+                <div class="example-buttons" id="exampleButtons">
+                    <!-- Example buttons will be loaded here -->
+                </div>
+            </div>
+
+            <div class="result-section" id="resultSection">
+                <div class="result-card">
+                    <div class="prediction" id="prediction">
+                        <!-- Prediction result will be shown here -->
+                    </div>
+
+                    <div class="confidence-bars">
+                        <h4>Confidence Scores:</h4>
+                        <div class="confidence-bar">
+                            <span class="confidence-label">Ham:</span>
+                            <div class="confidence-progress">
+                                <div class="confidence-fill ham" id="hamBar"></div>
+                            </div>
+                            <span class="confidence-value" id="hamValue">0%</span>
+                        </div>
+                        <div class="confidence-bar">
+                            <span class="confidence-label">Spam:</span>
+                            <div class="confidence-progress">
+                                <div class="confidence-fill spam" id="spamBar"></div>
+                            </div>
+                            <span class="confidence-value" id="spamValue">0%</span>
+                        </div>
+                    </div>
+
+                    <div class="features">
+                        <h4>📊 Text Analysis:</h4>
+                        <div class="feature-grid" id="features">
+                            <!-- Features will be displayed here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM elements
+        const emailText = document.getElementById('emailText');
+        const classifyBtn = document.getElementById('classifyBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const examplesBtn = document.getElementById('examplesBtn');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const resultSection = document.getElementById('resultSection');
+        const examples = document.getElementById('examples');
+        const exampleButtons = document.getElementById('exampleButtons');
+
+        // Event listeners
+        classifyBtn.addEventListener('click', classifyEmail);
+        clearBtn.addEventListener('click', clearAll);
+        examplesBtn.addEventListener('click', toggleExamples);
+
+        // Load examples on page load
+        loadExamples();
+
+        async function classifyEmail() {
+            const text = emailText.value.trim();
+            
+            if (!text) {
+                showError('Please enter some text to classify.');
+                return;
+            }
+
+            // Show loading
+            showLoading(true);
+            hideError();
+            hideResult();
+
+            try {
+                const response = await fetch('/api/classify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: text })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayResult(data);
+                } else {
+                    showError(data.error || 'Classification failed.');
+                }
+            } catch (err) {
+                showError('Network error. Please try again.');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function displayResult(data) {
+            const prediction = document.getElementById('prediction');
+            const hamBar = document.getElementById('hamBar');
+            const spamBar = document.getElementById('spamBar');
+            const hamValue = document.getElementById('hamValue');
+            const spamValue = document.getElementById('spamValue');
+            const features = document.getElementById('features');
+
+            // Set prediction
+            const isSpam = data.prediction === 'spam';
+            prediction.innerHTML = `
+                <div class="prediction-icon ${isSpam ? 'prediction-spam' : 'prediction-ham'}">
+                    ${isSpam ? '🚫' : '✅'}
+                </div>
+                <div class="prediction-text">
+                    ${isSpam ? 'SPAM DETECTED' : 'LEGITIMATE EMAIL'}
+                </div>
+            `;
+
+            // Set confidence bars
+            const hamConfidence = Math.round(data.confidence.ham * 100);
+            const spamConfidence = Math.round(data.confidence.spam * 100);
+            
+            hamBar.style.width = `${hamConfidence}%`;
+            spamBar.style.width = `${spamConfidence}%`;
+            hamValue.textContent = `${hamConfidence}%`;
+            spamValue.textContent = `${spamConfidence}%`;
+
+            // Display features
+            features.innerHTML = '';
+            const featureData = data.features;
+            
+            const featureItems = [
+                { key: 'text_length', label: 'Characters', value: featureData.text_length },
+                { key: 'word_count', label: 'Words', value: featureData.word_count },
+                { key: 'sentence_count', label: 'Sentences', value: featureData.sentence_count },
+                { key: 'exclamation_count', label: 'Exclamations', value: featureData.exclamation_count },
+                { key: 'question_count', label: 'Questions', value: featureData.question_count },
+                { key: 'capital_count', label: 'Capitals', value: featureData.capital_count },
+                { key: 'number_count', label: 'Numbers', value: featureData.number_count },
+                { key: 'spam_word_count', label: 'Spam Words', value: featureData.spam_word_count }
+            ];
+
+            featureItems.forEach(item => {
+                const featureDiv = document.createElement('div');
+                featureDiv.className = 'feature-item';
+                featureDiv.innerHTML = `
+                    <div class="feature-value">${item.value}</div>
+                    <div class="feature-label">${item.label}</div>
+                `;
+                features.appendChild(featureDiv);
+            });
+
+            showResult();
+        }
+
+        async function loadExamples() {
+            try {
+                const response = await fetch('/api/examples');
+                const data = await response.json();
+                
+                exampleButtons.innerHTML = '';
+                
+                // Add ham examples
+                data.ham.forEach(text => {
+                    const btn = createExampleButton(text, 'ham');
+                    exampleButtons.appendChild(btn);
+                });
+                
+                // Add spam examples
+                data.spam.forEach(text => {
+                    const btn = createExampleButton(text, 'spam');
+                    exampleButtons.appendChild(btn);
+                });
+            } catch (err) {
+                console.error('Failed to load examples:', err);
+            }
+        }
+
+        function createExampleButton(text, type) {
+            const btn = document.createElement('button');
+            btn.className = `example-btn ${type}`;
+            btn.textContent = text.substring(0, 30) + (text.length > 30 ? '...' : '');
+            btn.title = text;
+            btn.addEventListener('click', () => {
+                emailText.value = text;
+                classifyEmail();
+            });
+            return btn;
+        }
+
+        function toggleExamples() {
+            examples.style.display = examples.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function clearAll() {
+            emailText.value = '';
+            hideResult();
+            hideError();
+        }
+
+        function showLoading(show) {
+            loading.style.display = show ? 'block' : 'none';
+            classifyBtn.disabled = show;
+        }
+
+        function showError(message) {
+            error.textContent = message;
+            error.style.display = 'block';
+        }
+
+        function hideError() {
+            error.style.display = 'none';
+        }
+
+        function showResult() {
+            resultSection.style.display = 'block';
+        }
+
+        function hideResult() {
+            resultSection.style.display = 'none';
+        }
+
+        // Allow Enter key to trigger classification
+        emailText.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                classifyEmail();
+            }
+        });
+    </script>
+</body>
+</html> 
