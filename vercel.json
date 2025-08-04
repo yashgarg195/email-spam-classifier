@@ -19,10 +19,5 @@
     "PYTHONPATH": "."
   },
   "regions": ["iad1"],
-  "public": false,
-  "functions": {
-    "app.py": {
-      "maxDuration": 30
-    }
-  }
+  "public": false
 } 
